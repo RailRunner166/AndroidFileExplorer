@@ -10,6 +10,9 @@ import android.support.v7.app.AppCompatActivity;
 import android.support.v7.widget.Toolbar;
 
 import com.getdirectory.DirectoryFragment.DocumentSelectActivityDelegate;
+import java.io.File;
+import android.content.Intent;
+import android.webkit.MimeTypeMap;
 
 public class MainActivity extends AppCompatActivity {
 
@@ -42,15 +45,21 @@ public class MainActivity extends AppCompatActivity {
             }
 
             @Override
-            public void didSelectFiles(DirectoryFragment activity,
-                                       ArrayList<String> files) {
-                mDirectoryFragment.showErrorBox(files.get(0).toString());
+            public void didSelectFiles(DirectoryFragment activity, ArrayList<File> files) {
+				Intent intent = new Intent();
+				intent.setAction(Intent.ACTION_SEND);
+				File file = files.get(0);
+				intent.putExtra(Intent.EXTRA_STREAM, file.getAbsolutePath());
+				
+				String mime = MimeTypeMap.getSingleton().getMimeTypeFromExtension(MimeTypeMap.getFileExtensionFromUrl(file.getAbsolutePath()));
+				
+				intent.setType(mime);
+				startActivity(Intent.createChooser(intent, "Open with"));
             }
 
             @Override
             public void updateToolBarName(String name) {
                 toolbar.setTitle(name);
-
             }
         });
         fragmentTransaction.add(R.id.fragment_container, mDirectoryFragment, "" + mDirectoryFragment.toString());

@@ -45,10 +45,8 @@ public class DirectoryFragment extends Fragment {
     private ArrayList<ListItem> items = new ArrayList<ListItem>();
     private ArrayList<HistoryEntry> history = new ArrayList<HistoryEntry>();
     private HashMap<String, ListItem> selectedFiles = new HashMap<String, ListItem>();
-    private long sizeLimit = 1024 * 1024 * 1024;
-
-    private String[] chhosefileType = {".pdf", ".doc", ".docx", ".DOC", ".DOCX"};
-
+    private long sizeLimit = 0;
+	
     private class HistoryEntry {
         int scrollItem, scrollOffset;
         File dir;
@@ -56,7 +54,7 @@ public class DirectoryFragment extends Fragment {
     }
 
     public static abstract interface DocumentSelectActivityDelegate {
-        public void didSelectFiles(DirectoryFragment activity, ArrayList<String> files);
+        public void didSelectFiles(DirectoryFragment activity, ArrayList<File> files);
 
         public void startDocumentSelectActivity();
 
@@ -174,20 +172,15 @@ public class DirectoryFragment extends Fragment {
                 @Override
                 public void onItemClick(AdapterView<?> adapterView, View view,
                                         int i, long l) {
-                    if (i < 0 || i >= items.size()) {
-                        return;
-                    }
+                    if (i < 0 || i >= items.size()) return;
                     ListItem item = items.get(i);
                     File file = item.file;
                     if (file == null) {
                         HistoryEntry he = history.remove(history.size() - 1);
                         title_ = he.title;
                         updateName(title_);
-                        if (he.dir != null) {
-                            listFiles(he.dir);
-                        } else {
-                            listRoots();
-                        }
+                        if (he.dir != null) listFiles(he.dir);
+                        else listRoots();
                         listView.setSelectionFromTop(he.scrollItem,
                                 he.scrollOffset);
                     } else if (file.isDirectory()) {
@@ -197,42 +190,28 @@ public class DirectoryFragment extends Fragment {
                         he.dir = currentDir;
                         he.title = title_.toString();
                         updateName(title_);
-                        if (!listFiles(file)) {
-                            return;
-                        }
+                        if (!listFiles(file)) return;
                         history.add(he);
                         title_ = item.title;
                         updateName(title_);
                         listView.setSelection(0);
                     } else {
                         if (!file.canRead()) {
-                            showErrorBox("AccessError");
+                            showErrorBox("Error: Could not access file: Insufficient permissions.");
                             return;
                         }
                         if (sizeLimit != 0) {
                             if (file.length() > sizeLimit) {
-                                showErrorBox("FileUploadLimit");
+                                showErrorBox("Error: File upload limit reached.");
                                 return;
                             }
                         }
-                        if (file.length() == 0) {
-                            return;
+                        if (file.length() == 0) return;
+                        if (delegate != null) {
+                            ArrayList<File> files = new ArrayList<>();
+                            files.add(file);
+                            delegate.didSelectFiles(DirectoryFragment.this, files);
                         }
-                        if (file.toString().contains(chhosefileType[0]) ||
-                                file.toString().contains(chhosefileType[1]) ||
-                                file.toString().contains(chhosefileType[2]) ||
-                                file.toString().contains(chhosefileType[3]) ||
-                                file.toString().contains(chhosefileType[4])) {
-                            if (delegate != null) {
-                                ArrayList<String> files = new ArrayList<String>();
-                                files.add(file.getAbsolutePath());
-                                delegate.didSelectFiles(DirectoryFragment.this, files);
-                            }
-                        } else {
-                            showErrorBox("Choose correct file.");
-                            return;
-                        }
-
                     }
                 }
             });
@@ -255,9 +234,9 @@ public class DirectoryFragment extends Fragment {
         ListItem ext = new ListItem();
         if (Build.VERSION.SDK_INT < 9
                 || Environment.isExternalStorageRemovable()) {
-            ext.title = "SdCard";
+            ext.title = "SD Card";
         } else {
-            ext.title = "InternalStorage";
+            ext.title = "Internal Storage";
         }
         ext.icon = Build.VERSION.SDK_INT < 9
                 || Environment.isExternalStorageRemovable() ? R.drawable.ic_external_storage
@@ -296,9 +275,9 @@ public class DirectoryFragment extends Fragment {
                     try {
                         ListItem item = new ListItem();
                         if (path.toLowerCase().contains("sd")) {
-                            ext.title = "SdCard";
+                            ext.title = "SD Card";
                         } else {
-                            ext.title = "ExternalStorage";
+                            ext.title = "External Storage";
                         }
                         item.icon = R.drawable.ic_external_storage;
                         item.subtitle = getRootSubtitle(path);
@@ -314,28 +293,11 @@ public class DirectoryFragment extends Fragment {
         }
         ListItem fs = new ListItem();
         fs.title = "/";
-        fs.subtitle = "SystemRoot";
+        fs.subtitle = "System Root";
         fs.icon = R.drawable.ic_directory;
         fs.file = new File("/");
         items.add(fs);
 
-        // try {
-        // File telegramPath = new
-        // File(Environment.getExternalStorageDirectory(), "Telegram");
-        // if (telegramPath.exists()) {
-        // fs = new ListItem();
-        // fs.title = "Telegram";
-        // fs.subtitle = telegramPath.toString();
-        // fs.icon = R.drawable.ic_directory;
-        // fs.file = telegramPath;
-        // items.add(fs);
-        // }
-        // } catch (Exception e) {
-        // FileLog.e("tmessages", e);
-        // }
-
-        // AndroidUtilities.clearDrawableAnimation(listView);
-        // scrolling = true;
         listAdapter.notifyDataSetChanged();
     }
 
@@ -352,21 +314,18 @@ public class DirectoryFragment extends Fragment {
                     currentDir = dir;
                     items.clear();
                     String state = Environment.getExternalStorageState();
-                    if (Environment.MEDIA_SHARED.equals(state)) {
-                        emptyView.setText("UsbActive");
-                    } else {
-                        emptyView.setText("NotMounted");
-                    }
+                    if (Environment.MEDIA_SHARED.equals(state)) emptyView.setText("Usb Active");
+                    else emptyView.setText("Not Mounted");
                     clearDrawableAnimation(listView);
                     // scrolling = true;
                     listAdapter.notifyDataSetChanged();
                     return true;
                 }
             }
-            showErrorBox("AccessError");
+            showErrorBox("Error: Could not access file: Insufficient permissions.");
             return false;
         }
-        emptyView.setText("NoFiles");
+        emptyView.setText("No Files");
         File[] files = null;
         try {
             files = dir.listFiles();
@@ -375,7 +334,7 @@ public class DirectoryFragment extends Fragment {
             return false;
         }
         if (files == null) {
-            showErrorBox("UnknownError");
+            showErrorBox("Unknown Error");
             return false;
         }
         currentDir = dir;
@@ -430,27 +389,18 @@ public class DirectoryFragment extends Fragment {
     }
 
     public static String formatFileSize(long size) {
-        if (size < 1024) {
-            return String.format("%d B", size);
-        } else if (size < 1024 * 1024) {
-            return String.format("%.1f KB", size / 1024.0f);
-        } else if (size < 1024 * 1024 * 1024) {
-            return String.format("%.1f MB", size / 1024.0f / 1024.0f);
-        } else {
-            return String.format("%.1f GB", size / 1024.0f / 1024.0f / 1024.0f);
-        }
+        if (size < 1024) return String.format("%d B", size);
+        else if (size < 1024 * 1024) return String.format("%.1f KB", size / 1024.0f);
+        else if (size < 1024 * 1024 * 1024) return String.format("%.1f MB", size / 1024.0f / 1024.0f);
+        else return String.format("%.1f GB", size / 1024.0f / 1024.0f / 1024.0f);
     }
 
     public static void clearDrawableAnimation(View view) {
-        if (Build.VERSION.SDK_INT < 21 || view == null) {
-            return;
-        }
+        if (Build.VERSION.SDK_INT < 21 || view == null) return;
         Drawable drawable = null;
         if (view instanceof ListView) {
             drawable = ((ListView) view).getSelector();
-            if (drawable != null) {
-                drawable.setState(StateSet.NOTHING);
-            }
+            if (drawable != null) drawable.setState(StateSet.NOTHING);
         } else {
             drawable = view.getBackground();
             if (drawable != null) {
@@ -461,9 +411,8 @@ public class DirectoryFragment extends Fragment {
     }
 
     public void showErrorBox(String error) {
-        if (getActivity() == null) {
-            return;
-        }
+        if (getActivity() == null) return;
+		
         new AlertDialog.Builder(getActivity())
                 .setTitle(getActivity().getString(R.string.app_name))
                 .setMessage(error).setPositiveButton("OK", null).show();
@@ -474,10 +423,8 @@ public class DirectoryFragment extends Fragment {
         long total = (long) stat.getBlockCount() * (long) stat.getBlockSize();
         long free = (long) stat.getAvailableBlocks()
                 * (long) stat.getBlockSize();
-        if (total == 0) {
-            return "";
-        }
-        return "Free " + formatFileSize(free) + " of " + formatFileSize(total);
+        if (total == 0) return "";
+        return formatFileSize(free) + " free of " + formatFileSize(total) + " total.";
     }
 
     private class ListAdapter extends BaseFragmentAdapter {
